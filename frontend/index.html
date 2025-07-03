@@ -36,18 +36,16 @@
     </div>
   </div>
 
-  <!-- jQuery + Bootstrap JS -->
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script>
-    // Simulated backend fetch (replace with real API later)
+    // replace with real API later
     function updateStats() {
       $.getJSON("http://localhost:5000/metrics", function (data) {
         $("#cpu").text(data.cpu.toFixed(1));
         $("#memory").text(data.memory.toFixed(1));
       });
     }
-
-    // Run every 5 seconds
+    
     setInterval(updateStats, 5000);
     updateStats();
   </script>
