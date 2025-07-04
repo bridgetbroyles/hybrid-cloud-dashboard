@@ -17,7 +17,7 @@ public class MetricsController {
   private final OperatingSystemMXBean osBean =
     ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
 
-
+  @SuppressWarnings("deprecation")
   @GetMapping("/metrics")
   public Map<String, Double> getMetrics() {
     double cpu = osBean.getSystemCpuLoad() * 100;     
