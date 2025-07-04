@@ -13,4 +13,5 @@ RUN ./mvnw clean package -DskipTests
 
 EXPOSE 5000
 
-CMD ["java", "-jar", "target/your-app.jar"]
+CMD ["java", "-jar", "target/metrics-0.0.1-SNAPSHOT.jar"]
+
