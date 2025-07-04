@@ -1,29 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hybrid Cloud Monitoring Dashboard</title>
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
 </head>
-<body class="bg-dark text-white">
 
-  <div class="container mt-5">
+<body class="bg-dark text-white">
+  <div class="container mt-5 mx-auto">
     <h1 class="mb-4">Hybrid Cloud Monitoring Dashboard</h1>
     <div class="row g-4">
-
       <div class="col-md-4">
         <div class="card text-dark">
           <div class="card-body">
-            <h5 class="card-title">CPU Usage</h5>
+            <h5 class="card-title mx-auto">CPU Usage</h5>
             <p class="card-text"><span id="cpu">--</span>%</p>
           </div>
         </div>
       </div>
-
       <div class="col-md-4">
         <div class="card text-dark">
           <div class="card-body">
@@ -32,22 +30,81 @@
           </div>
         </div>
       </div>
-
     </div>
   </div>
 
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <div class="container mt-4">
+    <h4>CPU & Memory Usage Over Time</h4>
+    <canvas id="metricsChart" width = "300" height="100"></canvas>
+  </div>
+
   <script>
-    // replace with real API later
     function updateStats() {
       $.getJSON("http://localhost:5000/metrics", function (data) {
         $("#cpu").text(data.cpu.toFixed(1));
         $("#memory").text(data.memory.toFixed(1));
+        updateChart(data.cpu, data.memory);
       });
     }
-    
-    setInterval(updateStats, 5000);
+    setInterval(updateStats, 1500);
     updateStats();
   </script>
+
+  <script>
+    const labels = [];
+    const cpuData = [];
+    const memData = [];
+    const ctx = document.getElementById('metricsChart').getContext('2d');
+    const metricsChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'CPU (%)',
+            data: cpuData,
+            borderColor: 'rgba(255, 99, 132, 1)',
+            fill: false
+          },
+          {
+            label: 'Memory (%)',
+            data: memData,
+            borderColor: 'rgba(54, 162, 235, 1)',
+            fill: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        scales: {
+          x: {
+            display: false  
+          },
+          y: {
+            min: 0,
+            max: 100,
+            ticks: {
+              stepSize: 10
+            }
+          }
+        }
+      }
+    });
+
+    function updateChart(cpu, mem) {
+      const time = new Date().toLocaleTimeString();
+      labels.push(time);
+      cpuData.push(cpu);
+      memData.push(mem);
+      if (labels.length > 30) {
+        labels.shift();
+        cpuData.shift();
+        memData.shift();
+      }
+      metricsChart.update();
+    }
+  </script>
 </body>
+
 </html>
