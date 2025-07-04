@@ -1,0 +1,15 @@
+
+services:
+  backend:
+    build: ./backend/metrics
+    ports:
+      - "5000:5000"
+    container_name: dashboard-backend
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5500:5500"
+    container_name: dashboard-frontend
+    depends_on:
+      - backend
