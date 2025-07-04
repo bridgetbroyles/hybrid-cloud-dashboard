@@ -7,8 +7,10 @@ WORKDIR /app
 
 COPY . .
 
+RUN chmod +x mvnw
+
 RUN ./mvnw clean package -DskipTests
 
 EXPOSE 5000
 
-CMD ["java", "-jar", "target/metrics-0.0.1-SNAPSHOT.jar"]
+CMD ["java", "-jar", "target/your-app.jar"]
