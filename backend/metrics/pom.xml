@@ -34,6 +34,13 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
+	
+	<!--OSHI (Open Source Hardware Info) is a robust cross-platform Java library for system metrics including process lists, CPU ticks, and network counters-->
+	<dependency>
+	<groupId>com.github.oshi</groupId>
+	<artifactId>oshi-core</artifactId>
+	<version>6.4.3</version>
+	</dependency>
 
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
