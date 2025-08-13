@@ -1,110 +1,368 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hybrid Cloud Monitoring Dashboard</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-</head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hybrid Cloud Monitoring Dashboard </title>
 
-<body class="bg-dark text-white">
-  <div class="container mt-5 mx-auto">
-    <h1 class="mb-4">Hybrid Cloud Monitoring Dashboard</h1>
-    <div class="row g-4">
-      <div class="col-md-4">
-        <div class="card text-dark">
-          <div class="card-body">
-            <h5 class="card-title mx-auto">CPU Usage</h5>
-            <p class="card-text"><span id="cpu">--</span>%</p>
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+
+  <!-- Chart.js (explicit version) + jQuery -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+  <style>
+    body { background: linear-gradient(135deg,#0f1b2b,#123046); color:#fff; }
+    .metric-card { border-radius:12px; background: rgba(255,255,255,0.06); padding:16px; }
+    .metric-value { font-size:1.9rem; font-weight:700; }
+    .small-muted { color: #cdd5df; font-size:0.85rem; }
+    .status-green { color:#28a745; } 
+    .status-yellow { color:#ffc107; } 
+    .status-red { color:#dc3545; }
+    #chartCard { background: rgba(255,255,255,0.04); border-radius:12px; padding:12px; }
+
+    /* Header wrap so checkbox stays visible on narrow screens */
+    #chartCard .chart-header {
+      display:flex;
+      flex-wrap:wrap;
+      justify-content:space-between;
+      align-items:center;
+      gap:0.5rem;
+    }
+    /* Improve contrast for the autoscale label */
+    #chartCard .form-check-label { color: #fff !important; }
+  </style>
+</head>
+<body>
+  <div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2 class="m-0">Hybrid Cloud Monitoring</h2>
+      <div><button id="downloadCsv" class="btn btn-sm btn-outline-light">Download CSV</button></div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <div class="metric-card">
+          <div class="small-muted">CPU Usage</div>
+          <div id="cpu" class="metric-value">--%</div>
+          <div id="cpuStatus" class="small-muted">—</div>
+          <div class="small-muted" id="cpuNote" style="margin-top:6px; font-size:0.75rem;">
+            Note: process CPU% can be per-core and may not sum to system CPU%.
           </div>
         </div>
       </div>
-      <div class="col-md-4">
-        <div class="card text-dark">
-          <div class="card-body">
-            <h5 class="card-title">Memory Usage</h5>
-            <p class="card-text"><span id="memory">--</span>%</p>
+
+      <div class="col-md-3">
+        <div class="metric-card">
+          <div class="small-muted">Memory Usage</div>
+          <div id="memory" class="metric-value">--%</div>
+          <div id="memStatus" class="small-muted">—</div>
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <div class="metric-card">
+          <div class="small-muted">Network (Mbps)</div>
+          <div id="network" class="metric-value">--</div>
+          <div id="netStatus" class="small-muted">—</div>
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <div class="metric-card">
+          <div class="small-muted">Top Process</div>
+          <select id="procSelect" class="form-select form-select-sm mb-2">
+            <option value="">— select a process —</option>
+          </select>
+          <div id="procInfo" class="small-muted">Select a process to inspect.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="chartCard" class="mb-4">
+      <div class="chart-header mb-2">
+        <h6 class="m-0">CPU & Memory (last samples)</h6>
+        <div class="d-flex align-items-center gap-3">
+          <div class="small-muted">updates every 1.5s</div>
+          <div class="form-check form-switch ms-2">
+            <input class="form-check-input" type="checkbox" id="autoscaleToggle" checked>
+            <label class="form-check-label small-muted" for="autoscaleToggle">Auto-scale</label>
           </div>
         </div>
+      </div>
+      <canvas id="metricsChart" height="150"></canvas>
+    </div>
+
+    <div class="card p-2">
+      <h6 class="mb-2">Top Processes (snapshot)</h6>
+      <div class="table-responsive">
+        <table class="table table-sm table-dark table-striped mb-0">
+          <thead>
+            <tr><th>PID</th><th>Name</th><th>CPU%</th><th>Mem%</th><th>Cmd</th></tr>
+          </thead>
+          <tbody id="procTableBody">
+            <tr><td colspan="5" class="small-muted">No data yet.</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 
-  <div class="container mt-4">
-    <h4>CPU & Memory Usage Over Time</h4>
-    <canvas id="metricsChart" width = "300" height="100"></canvas>
-  </div>
+<script>
+/* -------------------------
+   HELPERS & BUFFERS
+---------------------------*/
+function safeNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
+}
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+}
 
-  <script>
-    function updateStats() {
-      $.getJSON("http://localhost:5000/metrics", function (data) {
-        $("#cpu").text(data.cpu.toFixed(1));
-        $("#memory").text(data.memory.toFixed(1));
-        updateChart(data.cpu, data.memory);
-      });
-    }
-    setInterval(updateStats, 1500);
-    updateStats();
-  </script>
+const labels = [];
+const cpuData = []; // numeric CPU series
+const memData = []; // numeric Memory series
+// expose for debugging in console
+window.cpuData = cpuData;
+window.memData = memData;
 
-  <script>
-    const labels = [];
-    const cpuData = [];
-    const memData = [];
-    const ctx = document.getElementById('metricsChart').getContext('2d');
-    const metricsChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: 'CPU (%)',
-            data: cpuData,
-            borderColor: 'rgba(255, 99, 132, 1)',
-            fill: false
-          },
-          {
-            label: 'Memory (%)',
-            data: memData,
-            borderColor: 'rgba(54, 162, 235, 1)',
-            fill: false
-          }
-        ]
+const MAX_POINTS = 60;
+
+/* ---------- CHART SETUP: CPU -> 'y' (left), Memory -> 'y1' (right) ---------- */
+const ctx = document.getElementById('metricsChart').getContext('2d');
+const metricsChart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'CPU %',
+        data: cpuData,
+        yAxisID: 'y',
+        borderColor: 'rgba(255,99,132,1)',
+        backgroundColor: 'rgba(255,99,132,0.12)',
+        fill: true,
+        tension: 0.2
       },
-      options: {
-        responsive: true,
-        animation: false,
-        scales: {
-          x: {
-            display: false  
-          },
-          y: {
-            min: 0,
-            max: 100,
-            ticks: {
-              stepSize: 10
-            }
+      {
+        label: 'Memory %',
+        data: memData,
+        yAxisID: 'y1',
+        borderColor: 'rgba(54,162,235,1)',
+        backgroundColor: 'rgba(54,162,235,0.12)',
+        fill: true,
+        tension: 0.2
+      }
+    ]
+  },
+  options: {
+    animation: false,
+    responsive: true,
+    scales: {
+      x: { display: false },
+      y: { // CPU axis (left) - autoscaled
+        type: 'linear',
+        position: 'left',
+        min: 0,
+        // do not set max here
+        ticks: {
+          callback: function(value) {
+            if (Math.abs(value) < 1) return Number(value).toFixed(3);
+            if (Math.abs(value) < 10) return Number(value).toFixed(2);
+            return Number(value).toFixed(0);
           }
-        }
+        },
+        grid: { drawOnChartArea: false }
+      },
+      y1: { // Memory axis (right) - fixed 0..100
+        type: 'linear',
+        position: 'right',
+        min: 0,
+        max: 100,
+        ticks: { callback: v => Number(v).toFixed(0) },
+        grid: { drawOnChartArea: true }
       }
-    });
-
-    function updateChart(cpu, mem) {
-      const time = new Date().toLocaleTimeString();
-      labels.push(time);
-      cpuData.push(cpu);
-      memData.push(mem);
-      if (labels.length > 30) {
-        labels.shift();
-        cpuData.shift();
-        memData.shift();
-      }
-      metricsChart.update();
+    },
+    plugins: {
+      legend: { labels: { color: '#fff' } }
     }
-  </script>
-</body>
+  }
+});
 
+/* ---------- AUTOSCALE LOGIC ---------- */
+let autoScale = true;
+$('#autoscaleToggle').off('change').on('change', function () {
+  autoScale = $(this).is(':checked');
+  adjustYAxis();
+});
+
+function adjustYAxis() {
+  // compute only from CPU series
+  const cpuVals = cpuData.filter(v => Number.isFinite(v));
+  if (!cpuVals.length) {
+    // remove explicit max so Chart.js can compute nicely
+    delete metricsChart.options.scales.y.max;
+    metricsChart.update('none');
+    console.debug('adjustYAxis: no cpu samples yet; cleared explicit max');
+    return;
+  }
+
+  const currentMax = Math.max(...cpuVals);
+  const paddingFactor = 1.25;
+
+  if (autoScale) {
+    let newMax = Math.max(currentMax * paddingFactor, 0.001); // floor for extremely small values
+    // round to sensible increments for nicer ticks
+    newMax = newMax >= 1 ? Math.ceil(newMax * 10) / 10 : Math.ceil(newMax * 1000) / 1000;
+    metricsChart.options.scales.y.max = newMax;
+    metricsChart.options.scales.y.min = 0;
+    metricsChart.update('none');
+    console.info('Autoscaled CPU axis -> max:', newMax);
+  } else {
+    // when disabled, show full percent range
+    metricsChart.options.scales.y.max = 100;
+    metricsChart.options.scales.y.min = 0;
+    metricsChart.update('none');
+    console.info('Autoscale OFF -> CPU axis 0..100');
+  }
+}
+
+/* ---------- PUSH POINT ---------- */
+function pushPoint(cpu, mem) {
+  const c = safeNum(cpu);
+  const m = safeNum(mem);
+  const t = new Date().toLocaleTimeString();
+  labels.push(t);
+  cpuData.push(Number.isFinite(c) ? c : 0);
+  memData.push(Number.isFinite(m) ? m : 0);
+
+  if (labels.length > MAX_POINTS) {
+    labels.shift();
+    cpuData.shift();
+    memData.shift();
+  }
+
+  adjustYAxis();
+}
+
+/* ---------- UI helpers & CSV ---------- */
+function setMetric(selector, rawValue, unit = '%') {
+  const el = $(selector);
+  const v = safeNum(rawValue);
+  if (Number.isFinite(v)) el.text(v.toFixed(2) + (unit ? unit : ''));
+  else el.text('--' + (unit ? unit : ''));
+}
+function setStatus(selector, value) {
+  const el = $(selector);
+  el.removeClass('status-green status-yellow status-red');
+  const v = safeNum(value);
+  if (!Number.isFinite(v)) { el.text('—'); return; }
+  if (v < 50) { el.addClass('status-green'); el.text('Normal'); }
+  else if (v < 80) { el.addClass('status-yellow'); el.text('Moderate'); }
+  else { el.addClass('status-red'); el.text('High'); }
+}
+function downloadCsv() {
+  if (labels.length === 0) return alert('No chart data yet.');
+  const rows = [['time','cpu_percent','memory_percent']];
+  for (let i=0;i<labels.length;i++) rows.push([labels[i], cpuData[i].toFixed(3), memData[i].toFixed(3)]);
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `metrics_${Date.now()}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+/* ---------- API POLLING & process UI (unchanged semantics) ---------- */
+function constructUrl() {
+  if (window.location.hostname && window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost') return '/metrics';
+  return 'http://localhost:6001/metrics';
+}
+
+let lastProcessList = [];
+function populateProcesses(procArray) {
+  const sel = $('#procSelect').empty();
+  sel.append($('<option>').val('').text('— select a process —'));
+  const tbody = $('#procTableBody').empty();
+
+  if (!Array.isArray(procArray) || procArray.length === 0) {
+    tbody.append('<tr><td colspan="5" class="small-muted">No processes in last sample.</td></tr>');
+    return;
+  }
+
+  procArray.forEach((p) => {
+    const pid = p.pid ?? p.PID ?? '';
+    const name = p.name ?? '';
+    const cpu = safeNum(p.cpu) || 0;
+    const mem = safeNum(p.memory) || 0;
+    const cmd = p.cmd ?? '';
+    sel.append($('<option>').val(pid).text(`${name} (pid:${pid}) cpu:${cpu.toFixed(2)}%`));
+    const row = `<tr>
+      <td>${pid}</td>
+      <td>${escapeHtml(name)}</td>
+      <td>${cpu.toFixed(2)}</td>
+      <td>${mem.toFixed(2)}</td>
+      <td class="text-truncate" style="max-width:40ch">${escapeHtml(cmd)}</td>
+    </tr>`;
+    tbody.append(row);
+  });
+}
+function showProcInfo(pid, procArray) {
+  const p = (procArray || []).find(x => String(x.pid) === String(pid));
+  if (!p) { $('#procInfo').text('Process not in last sample.'); return; }
+  const cpu = safeNum(p.cpu)||0; const mem = safeNum(p.memory)||0;
+  $('#procInfo').html(`<div><strong>${escapeHtml(p.name||'')}</strong> (pid ${p.pid})</div>
+    <div>CPU: ${cpu.toFixed(2)}% &nbsp; Memory: ${mem.toFixed(2)}%</div>
+    <div class="small-muted">Cmd: ${escapeHtml(p.cmd||'')}</div>`);
+}
+
+/* ---------- Polling / wiring ---------- */
+$(function () {
+  $('#procSelect').on('change', function () { showProcInfo($(this).val(), lastProcessList); });
+  $('#downloadCsv').on('click', downloadCsv);
+  $('#autoscaleToggle').off('change').on('change', function () { autoScale = $(this).is(':checked'); adjustYAxis(); });
+
+  // initial fetch and interval
+  updateStats();
+  setInterval(updateStats, 1500);
+});
+
+function updateStats() {
+  const url = constructUrl();
+  $.ajax({ url, method: 'GET', dataType: 'json', timeout: 5000 })
+    .done(function (data) {
+      if (!data) {
+        $('#cpu').text('--%'); $('#memory').text('--%'); $('#network').text('--'); return;
+      }
+
+      const cpu = safeNum(data.cpu);
+      const memory = safeNum(data.memory);
+      const network = safeNum(data.network);
+
+      $('#cpu').text(Number.isFinite(cpu) ? cpu.toFixed(2) + '%' : '--%');
+      $('#memory').text(Number.isFinite(memory) ? memory.toFixed(2) + '%' : '--%');
+      $('#network').text(Number.isFinite(network) ? String(network) : '--');
+
+      setStatus('#cpuStatus', cpu); setStatus('#memStatus', memory);
+      if (!Number.isFinite(network)) $('#netStatus').text('—'); else if (network < 1) $('#netStatus').text('Low'); else $('#netStatus').text('Active');
+
+      if (Number.isFinite(cpu) && Number.isFinite(memory)) {
+        pushPoint(cpu, memory);
+      }
+
+      const procs = Array.isArray(data.processes) ? data.processes : [];
+      lastProcessList = procs;
+      populateProcesses(procs);
+
+      const selected = $('#procSelect').val();
+      if (selected) showProcInfo(selected, procs);
+    })
+    .fail(function () {
+      $('#cpu').text('--%'); $('#memory').text('--%'); $('#network').text('--');
+      $('#procTableBody').html('<tr><td colspan="5" class="small-muted">Failed to load data.</td></tr>');
+    });
+}
+</script>
+</body>
 </html>
