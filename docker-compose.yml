@@ -3,7 +3,7 @@ services:
   backend:
     build: ./backend/metrics
     ports:
-      - "5000:5000"
+      - "6001:6001"
     container_name: dashboard-backend
 
   frontend:
